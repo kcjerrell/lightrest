@@ -104,6 +104,15 @@ app.get("/bulbs", function (req, res) {
 
 let calls = 0;
 
+// I just decided I want the way this to work (maybe optionally) is:
+// localhost:1337/bulbs/1/on #FF0000
+//                       /off
+//                       /h0s500v500
+//                       /white v500
+// maybe I dunno. It doesn't really matter unless you are typing the calls. nvm.
+
+// I can push directly without having to do a pull request right, because it's on the same branch?
+
 app.get("/bulbs/:index/:prop", function (req, res) {
     calls += 1;
     if (calls % 10 == 0) console.log(calls);
