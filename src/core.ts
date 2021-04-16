@@ -75,6 +75,12 @@ export interface BulbInfo {
     name?: string;
 }
 
+export function timeoutPromise(durationMs: number) : Promise<number> {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => resolve(durationMs), durationMs);
+    });
+}
+
 /* export function timeoutPromise(executor: Executor, toCallback: TimeoutCallback, durationMs: number) {
     const cancelToken = { cancelled: false, timedOut: false };
 

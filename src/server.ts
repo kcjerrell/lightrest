@@ -3,59 +3,16 @@ import * as bulbDevice from "./bulbdevice";
 import { DeviceProperty } from "./deviceproperty";
 import logger = require("./log");
 import { LightCycle } from "./lightcycle";
-import { clamp, sleep } from "./core";
+import { clamp, sleep, timeoutPromise } from "./core";
 import { trimod } from "./trimod";
 import e = require("express");
+import * as bulbInfoData from './bulbinfo.json';
+
+const bulbInfo = bulbInfoData.bulbs;
+
+const bulbs = loadBulbs(bulbInfo);
 
 const log = logger.log;
-
-const bulbInfo = [
-    {
-        id: "eba040c47ea782ca16eiad",
-        key: "e5cbe0a10dad9c93",
-        ip: "192.168.0.21",
-        name: "Face",
-    },
-    {
-        id: "eb2773e38adbb12683puvk",
-        key: "aa736ffedbe56ec8",
-        ip: "192.168.0.23",
-        name: "UpRight",
-    },
-    {
-        id: "ebf1e92bd63d8c059dbcvn",
-        key: "1022bf390de07246",
-        ip: "192.168.0.18",
-        name: "DownRight",
-    },
-    {
-        id: "eb32d7cd40417c0f6addl9",
-        key: "4b29203ead0de281",
-        ip: "192.168.0.22",
-        name: "DownLeft",
-    },
-    {
-        id: "ebf8d36fec611039bbggej",
-        key: "50dad0673f4febbc",
-        ip: "192.168.0.17",
-        name: "UpLeft",
-    },
-    {
-        id: "ebfc8703b8fcfab217ot0v",
-        key: "1a13a246e713fe58",
-        ip: "192.168.0.24",
-        name: "Up",
-    },
-];
-
-const bulbs: bulbDevice.Bulb[] = [];
-
-for (let i = 0; i < bulbInfo.length; i++) {
-    bulbDevice.TryGetBulb(bulbInfo[i]).then(
-        (bulb) => bulbs.push(bulb),
-        (e) => console.log(e)
-    );
-}
 
 // this is all very unsafe
 function index_to_bulbs(index) {
@@ -79,13 +36,11 @@ function index_to_bulbs(index) {
     return bs;
 }
 
-("use strict");
-
 const app = express();
 
 app.set("json spaces", 4);
 
-app.get("/bulbs", function (req, res) {
+app.get("/bulbs", (req, res) => {
     const data = [];
     for (let i = 0; i < bulbs.length; i++) {
         data.push({
@@ -111,11 +66,9 @@ let calls = 0;
 //                       /white v500
 // maybe I dunno. It doesn't really matter unless you are typing the calls. nvm.
 
-// I can push directly without having to do a pull request right, because it's on the same branch?
-
 app.get("/bulbs/:index/:prop", function (req, res) {
     calls += 1;
-    if (calls % 10 == 0) console.log(calls);
+    if (calls % 10 === 0) console.log(calls);
 
     const index = req.params.index;
     const prop = req.params.prop;
@@ -123,7 +76,7 @@ app.get("/bulbs/:index/:prop", function (req, res) {
 
     const bs = index_to_bulbs(index);
 
-    if (bs.length == 0) {
+    if (bs.length === 0) {
         res.end();
         return;
     }
@@ -132,24 +85,24 @@ app.get("/bulbs/:index/:prop", function (req, res) {
 
     switch (prop) {
         case "power":
-            if (q.v != undefined && q.v.toString().toLowerCase() == "true")
+            if (q.v !== undefined && q.v.toString().toLowerCase() == "true")
                 mapFunc = (bulb) => bulb.set_power(true);
-            else if (q.v != undefined && q.v.toString().toLowerCase() == "false")
+            else if (q.v !== undefined && q.v.toString().toLowerCase() == "false")
                 mapFunc = (bulb) => bulb.set_power(false);
             else mapFunc = (bulb) => bulb.get_power();
             break;
 
         case "color":
-            let qh = q.hasOwnProperty("h")
+            const qh = q.hasOwnProperty("h")
                 ? clamp(parseFloat(q.h.toString()), 0, 1)
                 : -1;
-            let qs = q.hasOwnProperty("s")
+            const qs = q.hasOwnProperty("s")
                 ? clamp(parseFloat(q.s.toString()), 0, 1)
                 : -1;
-            let qv = q.hasOwnProperty("v")
+            const qv = q.hasOwnProperty("v")
                 ? clamp(parseFloat(q.v.toString()), 0, 1)
                 : -1;
-            let qt = q.hasOwnProperty("t") ? parseFloat(q.t.toString()) : 0;
+            const qt = q.hasOwnProperty("t") ? parseFloat(q.t.toString()) : 0;
 
             if (q.h != undefined || q.s != undefined || q.v != undefined)
                 mapFunc = (bulb) => bulb.set_color({ h: qh, s: qs, v: qv, t: qt });
@@ -158,7 +111,7 @@ app.get("/bulbs/:index/:prop", function (req, res) {
 
         case "mode":
             if (
-                q.v != undefined &&
+                q.v !== undefined &&
                 (q.v.toString().toLowerCase() == "color" ||
                     q.v.toString().toLowerCase() == "colour" ||
                     q.v.toString().toLowerCase() == "white")
@@ -168,25 +121,25 @@ app.get("/bulbs/:index/:prop", function (req, res) {
             break;
 
         case "brightness":
-            if (q.v != undefined)
+            if (q.v !== undefined)
                 mapFunc = (bulb) => bulb.set_brightness(parseInt(q.v.toString()));
             else mapFunc = (bulb) => bulb.get_brightness();
             break;
 
         case "warmth":
-            if (q.v != undefined)
+            if (q.v !== undefined)
                 mapFunc = (bulb) => bulb.set_warmth(parseInt(q.V.toString()));
             else mapFunc = (bulb) => bulb.get_warmth();
             break;
 
         case "schema":
-            mapFunc = function (bulb) {
+            mapFunc = (bulb) => {
                 return bulb.get({ schema: true });
             };
             break;
 
         case "status":
-            mapFunc = function (bulb) {
+            mapFunc = (bulb) => {
                 return `${bulb.name}: ${bulb.pow} - ${bulb.mode} - ${bulb.brightness} - ${bulb.colortemp} - ${bulb.col.h},${bulb.col.s},${bulb.col.v}`;
             };
             break;
@@ -196,7 +149,7 @@ app.get("/bulbs/:index/:prop", function (req, res) {
             break;
     }
 
-    let promises = bs.map(mapFunc);
+    const promises = bs.map(mapFunc);
     Promise.all(promises).then(
         (response) => {
             res.send({ data: response });
@@ -208,13 +161,22 @@ app.get("/bulbs/:index/:prop", function (req, res) {
     );
 });
 
+app.post("/bulbs", (req, res) => {
+
+});
+
+app.get("/test", async (req, res) => {
+    const time = await timeoutPromise(1000);
+    res.send("done");
+});
+
 app.get("/fun1", (req, res) => {
     setTimeout(() => fun(1), 500);
     return "Fun!";
 });
 
 app.get("/fun2", (req, res) => {
-    if (lcs == undefined) {
+    if (lcs === undefined) {
         fun(2);
         res.send("Fun2!");
     } else {
@@ -229,7 +191,7 @@ let lcs: LightCycle[];
 
 let tms: trimod[];
 app.get("/fun3", (req, res) => {
-    if (tms != undefined) {
+    if (tms !== undefined) {
         for (let i = 0; i < tms.length; i++) {
             const tm = tms[i];
             tm.stop();
@@ -250,35 +212,35 @@ app.get("/fun3", (req, res) => {
 });
 
 async function fun(n: number) {
-    if (n == 1) {
+    if (n === 1) {
         const face = bulbFromName("Face");
-        if (face == undefined) return;
+        if (face === undefined) return;
         const lamps = bulbs.filter((b) => b != face);
 
         let rep = 0;
         let i = 0;
 
-        let t_on = 100;
-        let t_off = 0;
+        const tOn = 100;
+        const tOff = 0;
 
         while (rep < 100) {
             face.set_power(true);
-            await sleep(t_on);
+            await sleep(tOn);
             face.set_power(false);
-            await sleep(t_off);
+            await sleep(tOff);
 
             const b = lamps[i % lamps.length];
             b.set_power(true);
-            await sleep(t_on);
+            await sleep(tOn);
             b.set_power(false);
-            await sleep(t_off);
+            await sleep(tOff);
 
             i += 1;
             rep += 1;
         }
     }
 
-    if (n == 2) {
+    if (n === 2) {
         lcs = [];
         const ic = { h: 0, s: 1, v: 1 };
         for (let i = 0; i < bulbs.length; i++) {
@@ -297,4 +259,15 @@ function bulbFromName(name: string): bulbDevice.Bulb {
     return undefined;
 }
 
-let server = app.listen(1337);
+const server = app.listen(1337);
+
+function loadBulbs(info: { id: string; key: string; ip: string; name: string; }[]) {
+    const bs: bulbDevice.Bulb[] = [];
+
+    for (const bi of info) {
+        bulbDevice.TryGetBulb(bi).then((b) => bs.push(b));
+    }
+
+    return bs;
+}
+

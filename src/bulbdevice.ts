@@ -2,16 +2,16 @@ import TuyAPI = require('tuyapi');
 import col = require('./color')
 import logger = require('./log');
 import * as devProp from './deviceproperty';
-import { HSV, hsv_to_hex, interpolate_colors } from './core';
+import { HSV, hsv_to_hex, interpolate_colors, timeoutPromise } from './core';
 
 const log = logger.log;
 
-const timeoutMs = 1000;
+const timeoutMs = 500;
 
 function formatDps(data) {
     // log(data,3);
 
-    if (data.dps == undefined)
+    if (data.dps === undefined)
         return data;
 
     if (data.dps.hasOwnProperty('20')) {
@@ -45,11 +45,18 @@ function formatDps(data) {
     return data;
 }
 
-interface setOptions {
+interface SetOptions {
     dps?: number;
     set?: any;
     multiple?: boolean;
     data?: object;
+}
+
+interface BulbInfo {
+    id: string,
+    key: string,
+    ip: string,
+    name: string
 }
 
 export class Bulb extends TuyAPI {
@@ -61,7 +68,7 @@ export class Bulb extends TuyAPI {
     colortemp: any;
     status: any;
 
-    constructor({ id, key, ip, name = '' }) {
+    constructor({ id, key, ip, name = '' }: BulbInfo) {
         super({ id, key, ip, version: 3.3 });
         this.name = name;
         this.on('connected', this.onConnected);
@@ -74,21 +81,13 @@ export class Bulb extends TuyAPI {
         log(`${this.name} connected`, 2);
     }
 
-    // since I plan on (or want to be able to) make light color changes up to several times a second
-    // and since occaisionally requests justs don't go through, hang, or fail
-    // I need to fix that. Right now when a request doesn't work, the light gets 'stuck' until I
-    // reconnect
-    // but I don't think you can cancel a promise like you can cancel a Task in c#. At least not one
-    // you didn't write.
-    set(options: setOptions): Promise<object> {
+    set(options: SetOptions): Promise<object> {
         const promise = new Promise<object>((resolve, reject) => {
-            // tslint:disable-next-line: no-trailing-whitespace
-
             const cancelToken = { cancelled: false };
 
             const to = setTimeout((elapsedMs) => {
                 cancelToken.cancelled = true;
-                reject({ error: "timedout", elapsedMs });
+                resolve({ error: "timedout", elapsedMs });
             }, timeoutMs, timeoutMs);
 
             super.set(options).then((value) => {
@@ -99,7 +98,7 @@ export class Bulb extends TuyAPI {
             }, (reason) => {
                 if (!cancelToken.cancelled) {
                     clearTimeout(to);
-                    reject(reason);
+                    resolve({ error: reason });
                 }
             });
         });
@@ -109,16 +108,16 @@ export class Bulb extends TuyAPI {
     onData(data) {
         // log(`${this.name}: ${data}`, 0);
 
-        if (data.dps != undefined) {
-            if (data.dps['20'] != undefined)
+        if (data.dps !== undefined) {
+            if (data.dps['20'] !== undefined)
                 this.pow = data.dps['20'];
-            if (data.dps['24'] != undefined)
+            if (data.dps['24'] !== undefined)
                 this.col = col.TuyaToHSV(data.dps['24']);
-            if (data.dps['21'] != undefined)
+            if (data.dps['21'] !== undefined)
                 this.mode = data.dps['21'];
-            if (data.dps['22'] != undefined)
+            if (data.dps['22'] !== undefined)
                 this.brightness = data.dps['22'];
-            if (data.dps['23'] != undefined)
+            if (data.dps['23'] !== undefined)
                 this.colortemp = data.dps['23'];
         }
     }
@@ -136,141 +135,80 @@ export class Bulb extends TuyAPI {
         // console.log(this.status);
     }
 
-    get_power() {
-        return this.get({ dps: 20 }).then(
-            (power) => {
-                return { dps: { power } };
-            }
-        );
+    async get_power() {
+        const power = await this.get({ dps: 20 });
+        return { dps: { power } };
     }
 
-    set_power(power) {
-        return this.set({ dps: 20, set: power }).then(formatDps);
+    async set_power(power) {
+        const data = await this.set({ dps: 20, set: power });
+        return formatDps(data);
     }
 
-    get_color() {
-        return this.get({ dps: 24 }).then(
-            (color) => {
-                return { dps: { color: col.TuyaToHSV(color) } };
-            });
+    async get_color() {
+        const color = await this.get({ dps: 24 });
+        return { dps: { color: col.TuyaToHSV(color) } };
     }
 
-    set_color(color) {
+    async set_color(color) {
         const h = color.h >= 0 ? color.h : this.col.h;
         const s = color.s >= 0 ? color.s : this.col.s;
         const v = color.v >= 0 ? color.v : this.col.v;
-
-        if (color.t > 0) {
-            const start = Date.now();
-            const colA = { h: this.col.h, s: this.col.s, v: this.col.v };
-            const colB = { h, s, v };
-            const duration = color.t;
-
-            setTimeout(() => this.fade_color(colA, colB, start, duration), 10,);
-            return Promise.resolve({ dps: {} });
-        }
-
         const hex = hsv_to_hex(h, s, v);
-        return this.set({ dps: 24, set: hex }).then(formatDps);
+
+        const data = await this.set({ dps: 24, set: hex });
+        return formatDps(data);
     }
 
     formatMode(data) {
-        if (data == "colour")
+        if (data === "colour")
             data = "color";
         return { dps: { mode: data } };
     }
 
-    get_mode() {
-        return this.get({ dps: 21 }).then(formatDps);
+    async get_mode() {
+        const data = await this.get({ dps: 21 });
+        return formatDps(data);
     }
 
-    set_mode(mode) {
-        if (mode == 'color' || mode == 'colour')
-            return this.set({ dps: 21, set: 'colour' }).then(formatDps);
-        else if (mode == 'white')
-            return this.set({ dps: 21, set: 'white' }).then(formatDps);
+    async set_mode(mode) {
+        if (mode === 'color' || mode === 'colour')
+            return formatDps(await this.set({ dps: 21, set: 'colour' }));
+        else if (mode === 'white')
+            return formatDps(await this.set({ dps: 21, set: 'white' }));
     }
 
     formatBrightness(data) {
         return { dps: { brightness: data } };
     }
 
-    get_brightness() {
-        return this.get({ dps: 22 }).then(formatDps);
+    async get_brightness() {
+        const data = await this.get({ dps: 22 });
+        return formatDps(data);
     }
 
-    set_brightness(brightness: number) {
-        return this.set({ dps: 22, set: brightness }).then(formatDps);
+    async set_brightness(brightness: number) {
+        const data = await this.set({ dps: 22, set: brightness });
+        return formatDps(data);
     }
 
     formatWarmth(data) {
         return { dps: { warmth: data } };
     }
 
-    get_warmth() {
-        return this.get({ dps: 23 }).then(formatDps);
+    async get_warmth() {
+        const data = await this.get({ dps: 23 });
+        return formatDps(data);
     }
 
-    set_warmth(warmth: number) {
-        return this.set({ dps: 23, set: warmth }).then(formatDps);
-    }
-
-    fade_count: number = 0;
-    fade_frames: number[] = []
-    fade_color(colA: HSV, colB: HSV, start: number, duration: number, callback: Function = undefined) {
-        const now = Date.now();
-        const prog = (now - start) / duration;
-
-        this.fade_frames.push(now - start)
-        this.fade_count += 1;
-        if (this.fade_count % 10 == 0)
-            log(`${this.fade_count}`);
-
-        if (prog >= 1) {
-            this.fade_count = 0;
-            // log(this.fade_frames);
-            this.set_color(colB);
-            if (callback != undefined)
-                callback();
-        }
-        else {
-            const col = interpolate_colors(colA, colB, prog);
-            const hex = hsv_to_hex(col.h, col.s, col.v);
-            this.set({ dps: 24, set: hex }).then(() => this.fade_color(colA, colB, start, duration));
-        }
-    }
-
-    bubble_state: number = 0;
-    bubble_a: HSV = { h: .5, s: .7, v: .9 }
-    bubble_b: HSV = { h: .5, s: 1, v: .6 }
-    bubble() {
-        log("bub", 1);
-        if (this.bubble_state % 2 == 0) {
-            this.fade_color(this.bubble_a, this.bubble_b, Date.now(), 1500, () => this.bubble());
-        }
-        else {
-            this.fade_color(this.bubble_b, this.bubble_a, Date.now(), 500, () => this.bubble());
-        }
-        this.bubble_state += 1;
-    }
-
-    async special() {
-        const responses = [];
-
-        await this.set({ dps: 20, set: true }).then(res => responses.push(res));
-        await this.set({ dps: 21, set: "white" }).then(res => responses.push(res));
-        await this.set({ dps: 22, set: 500 }).then(res => responses.push(res));
-        await this.set({ dps: 23, set: 500 }).then(res => responses.push(res));
-        await this.set({ dps: 24, set: hsv_to_hex(1, 1, 1) }).then(res => responses.push(res));
-
-        log(responses);
-
-        return (responses)
+    async set_warmth(warmth: number) {
+        const data = await this.set({ dps: 23, set: warmth });
+        return formatDps(data);
     }
 }
 
-export function TryGetBulb(info): Promise<Bulb> {
-    return new Promise(function (resolve, reject) {
+export function TryGetBulb(info: BulbInfo): Promise<Bulb> {
+    return new Promise((resolve, reject) => {
         const bulb = new Bulb(info);
 
         const timeout = setTimeout(() => { bulb.disconnect(); }, 3000)
