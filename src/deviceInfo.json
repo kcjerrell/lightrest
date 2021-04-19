@@ -1,0 +1,51 @@
+{ "bulbs": [
+	{
+			"id": "eba040c47ea782ca16eiad",
+			"key": "e5cbe0a10dad9c93",
+			"ip": "192.168.0.21",
+			"name": "Face"
+	},
+	{
+			"id": "eb2773e38adbb12683puvk",
+			"key": "aa736ffedbe56ec8",
+			"ip": "192.168.0.23",
+			"name": "UpRight"
+	},
+	{
+			"id": "ebf1e92bd63d8c059dbcvn",
+			"key": "1022bf390de07246",
+			"ip": "192.168.0.18",
+			"name": "DownRight"
+	},
+	{
+			"id": "eb32d7cd40417c0f6addl9",
+			"key": "4b29203ead0de281",
+			"ip": "192.168.0.22",
+			"name": "DownLeft"
+	},
+	{
+			"id": "ebf8d36fec611039bbggej",
+			"key": "50dad0673f4febbc",
+			"ip": "192.168.0.17",
+			"name": "UpLeft"
+	},
+	{
+			"id": "ebfc8703b8fcfab217ot0v",
+			"key": "1a13a246e713fe58",
+			"ip": "192.168.0.24",
+			"name": "Up"
+	}
+],
+
+"request": [
+	{
+		 "index" : 4,
+		 "dps": 22,
+		 "set": 500
+	},
+	{
+		"index" : 3,
+		"dps": 20,
+		"set": true
+	}
+]}

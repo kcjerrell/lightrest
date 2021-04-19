@@ -1,8 +1,9 @@
 import TuyAPI = require('tuyapi');
 import col = require('./color')
 import logger = require('./log');
-import * as devProp from './deviceproperty';
 import { HSV, hsv_to_hex, interpolate_colors, timeoutPromise } from './core';
+import EventEmitter = require('node:events');
+import { LightDgramProperty } from './lightdgram';
 
 const log = logger.log;
 
@@ -67,6 +68,7 @@ export class Bulb extends TuyAPI {
     brightness: any;
     colortemp: any;
     status: any;
+   // resourceId: string;
 
     constructor({ id, key, ip, name = '' }: BulbInfo) {
         super({ id, key, ip, version: 3.3 });
@@ -109,16 +111,26 @@ export class Bulb extends TuyAPI {
         // log(`${this.name}: ${data}`, 0);
 
         if (data.dps !== undefined) {
-            if (data.dps['20'] !== undefined)
+            if (data.dps['20'] !== undefined) {
                 this.pow = data.dps['20'];
-            if (data.dps['24'] !== undefined)
+                super.emit('propertychanged', LightDgramProperty.Power, this.pow);
+            }
+            if (data.dps['24'] !== undefined) {
                 this.col = col.TuyaToHSV(data.dps['24']);
-            if (data.dps['21'] !== undefined)
+                super.emit('propertychanged', LightDgramProperty.Color, this.col);
+            }
+            if (data.dps['21'] !== undefined) {
                 this.mode = data.dps['21'];
-            if (data.dps['22'] !== undefined)
+                super.emit('propertychanged', LightDgramProperty.Mode, this.mode);
+            }
+            if (data.dps['22'] !== undefined) {
                 this.brightness = data.dps['22'];
-            if (data.dps['23'] !== undefined)
+                super.emit('propertychanged', LightDgramProperty.Brightness, this.brightness);
+            }
+            if (data.dps['23'] !== undefined) {
                 this.colortemp = data.dps['23'];
+                super.emit('propertychanged', LightDgramProperty.ColorTemp, this.colortemp);
+            }
         }
     }
 

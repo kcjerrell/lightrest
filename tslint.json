@@ -1,11 +1,13 @@
 {
-    "defaultSeverity": "error",
-    "extends": [
-        "tslint:recommended"
-    ],
-    "jsRules": {},
-    "rules": {
-        "no-console": false
-    },
-    "rulesDirectory": []
+  "defaultSeverity": "error",
+  "extends": ["tslint:recommended"],
+  "jsRules": {},
+  "rules": {
+    "no-console": false,
+    "no-trailing-whitespace": { "severity": "off" }
+  },
+  "rulesDirectory": [],
+  "linterOptions": {
+    "exclude": ["exclude"]
+  }
 }

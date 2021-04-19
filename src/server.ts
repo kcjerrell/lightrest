@@ -1,12 +1,8 @@
 import express = require("express");
-import * as bulbDevice from "./bulbdevice";
-import { DeviceProperty } from "./deviceproperty";
 import logger = require("./log");
-import { LightCycle } from "./lightcycle";
 import { clamp, sleep, timeoutPromise } from "./core";
-import { trimod } from "./trimod";
-import e = require("express");
-import * as bulbInfoData from './bulbinfo.json';
+import * as bulbDevice from "./bulbdevice";
+import * as bulbInfoData from './deviceInfo.json';
 
 const bulbInfo = bulbInfoData.bulbs;
 
@@ -58,13 +54,6 @@ app.get("/bulbs", (req, res) => {
 });
 
 let calls = 0;
-
-// I just decided I want the way this to work (maybe optionally) is:
-// localhost:1337/bulbs/1/on #FF0000
-//                       /off
-//                       /h0s500v500
-//                       /white v500
-// maybe I dunno. It doesn't really matter unless you are typing the calls. nvm.
 
 app.get("/bulbs/:index/:prop", function (req, res) {
     calls += 1;
@@ -160,96 +149,6 @@ app.get("/bulbs/:index/:prop", function (req, res) {
         }
     );
 });
-
-app.post("/bulbs", (req, res) => {
-
-});
-
-app.get("/test", async (req, res) => {
-    const time = await timeoutPromise(1000);
-    res.send("done");
-});
-
-app.get("/fun1", (req, res) => {
-    setTimeout(() => fun(1), 500);
-    return "Fun!";
-});
-
-app.get("/fun2", (req, res) => {
-    if (lcs === undefined) {
-        fun(2);
-        res.send("Fun2!");
-    } else {
-        lcs.forEach((lc) => {
-            lc.stop();
-        });
-        lcs = undefined;
-        res.send("No fun2!");
-    }
-});
-let lcs: LightCycle[];
-
-let tms: trimod[];
-app.get("/fun3", (req, res) => {
-    if (tms !== undefined) {
-        for (let i = 0; i < tms.length; i++) {
-            const tm = tms[i];
-            tm.stop();
-        }
-
-        tms = undefined;
-    } else {
-        tms = [];
-        const ic = { h: 0.2, s: 0.9, v: 0.3 };
-        for (let i = 0; i < bulbs.length; i++) {
-            const tm = new trimod(bulbs[i]);
-            tms.push(tm);
-            tm.start(ic, 0.3, 0.7, 20000);
-        }
-    }
-
-    res.send("fun?");
-});
-
-async function fun(n: number) {
-    if (n === 1) {
-        const face = bulbFromName("Face");
-        if (face === undefined) return;
-        const lamps = bulbs.filter((b) => b != face);
-
-        let rep = 0;
-        let i = 0;
-
-        const tOn = 100;
-        const tOff = 0;
-
-        while (rep < 100) {
-            face.set_power(true);
-            await sleep(tOn);
-            face.set_power(false);
-            await sleep(tOff);
-
-            const b = lamps[i % lamps.length];
-            b.set_power(true);
-            await sleep(tOn);
-            b.set_power(false);
-            await sleep(tOff);
-
-            i += 1;
-            rep += 1;
-        }
-    }
-
-    if (n === 2) {
-        lcs = [];
-        const ic = { h: 0, s: 1, v: 1 };
-        for (let i = 0; i < bulbs.length; i++) {
-            const lc = new LightCycle(bulbs[i]);
-            lcs.push(lc);
-            lc.start(ic);
-        }
-    }
-}
 
 function bulbFromName(name: string): bulbDevice.Bulb {
     for (let i = 0; i < bulbs.length; i++) {
