@@ -10,8 +10,6 @@ const log = logger.log;
 const timeoutMs = 500;
 
 function formatDps(data) {
-    // log(data,3);
-
     if (data.dps === undefined)
         return data;
 
@@ -86,7 +84,6 @@ export class Bulb extends TuyAPI {
     colortemp: any;
     status: any;
     initialLog: boolean = true;
-    // resourceId: string;
 
     constructor({ id, key, ip, name = '' }: BulbInfo) {
         super({ id, key, ip, version: 3.3 });
@@ -99,48 +96,30 @@ export class Bulb extends TuyAPI {
 
     onConnected() {
         log(`${this.name} connected`, 4);
-        super.get({ schema: true }).then((data) => log(data, 4));
+        super.get({ schema: true });
     }
 
     set(options: SetOptions): Promise<object> {
-        // const promise = new Promise<object>((resolve, reject) => {
-        //    const cancelToken = { cancelled: false };
-
-        //    const to = setTimeout((elapsedMs) => {
-        //        cancelToken.cancelled = true;
-        //        resolve({ error: "timedout", elapsedMs });
-        //    }, timeoutMs, timeoutMs);
-
-        //    super.set(options).then((value) => {
-        //        if (!cancelToken.cancelled) {
-        //            clearTimeout(to);
-        //            resolve(value);
-        //        }
-        //    }, (reason) => {
-        //        if (!cancelToken.cancelled) {
-        //            clearTimeout(to);
-        //            resolve({ error: reason });
-        //        }
-        //    });
-        // });
+        log(`setting property: ${JSON.stringify(options)}`, 2)
         return super.set(options);
     }
-
-
 
     // 0004c02ba03e800000000
     // 000fc03e8032000000000
     qset(data: { property: string, value: string }[]) {
         const options: SetOptions = { shouldWaitForResponse: false }
 
-        // if (data.length === 1) {
-        //     options.dps = dpsProps[data[0].property];
-        //    options.set = data[0].value;
-        // }
-
-        //else {
         options.multiple = true;
         options.data = {};
+
+        // I need to scan through the properties and if there is a "mode" wish,
+        // It can be disregarded if an implicit property is also wished for
+        // IE: if you set "color", mode will automatically switch. I think that's why I get
+        // those flashes is because the mode switches and then immediately it changes color/temp
+
+        if (data.length > 1) {
+            const modeReq = data.find(d => d.property === 'mode')
+        }
 
         data.forEach(d => {
             const dps = dpsProps[d.property];
@@ -170,15 +149,8 @@ export class Bulb extends TuyAPI {
                     break;
             }
         });
-        // }
-        // const dps = dpsProps[property];
-        // const options = { dps, set: value, shouldWaitForResponse: false };
-        // log(`${property} ${value} : ${JSON.stringify(options)}`, 2)
-        // super.set(options);
 
-        log(options, 3);
-
-        super.set(options);
+        this.set(options);
 
         function decodeColor(colorText: string): HSV {
             const matches = colorText.match(/h([0-9.]+)s([0-9.]+)v([0-9.]+)/);
@@ -188,7 +160,6 @@ export class Bulb extends TuyAPI {
             return { h, s, v };
         }
     }
-
 
     static validateMode(mode: string) {
         const lmode = mode.toLowerCase();
@@ -202,11 +173,11 @@ export class Bulb extends TuyAPI {
 
     onData(data) {
         if (this.initialLog) {
-            log(`${this.name}: ${JSON.stringify(data)}`, 3);
+            log(`${this.name} init-rcvd: ${JSON.stringify(data)}`, 3);
             this.initialLog = false;
         }
         else
-            log(`${this.name}: ${JSON.stringify(data)}`, 1);
+            log(`${this.name} rcvd: ${JSON.stringify(data)}`, 1);
 
         if (data.dps !== undefined) {
             if (data.dps['20'] !== undefined) {

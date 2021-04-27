@@ -1,7 +1,7 @@
 let logLevel = 3;
 
 export function log(data, level = 3) {
-    if (level <= logLevel)
+    if (level >= logLevel)
         console.log(JSON.stringify(data));
 }
 

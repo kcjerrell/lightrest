@@ -41,9 +41,11 @@ export enum LightDgramProperty {
 }
 
 export enum DgramVerbs {
-			None = "none",
-			Tell = "tell",       // Inform remote of resource property
-			Wonder = "wonder",     // Express interest in remote resource property
-			Wish = "wish",       // Request a change in remote property
-			Enloop = "enloop",     // Request to be updated of all changes in a remote resource property
+	None = "none",
+	Tell = "tell",       // Inform remote of resource property
+	Wonder = "wonder",   // Express interest in remote resource property
+	Wish = "wish",       // Request a change in remote property
+	Enloop = "enloop",   // Request to be updated of all changes in a remote resource property
+	Holler = "holler",	 // Initiates communication with server
+	Nod = "nod",				 // informs server that client is still online
 }
