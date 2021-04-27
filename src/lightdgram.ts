@@ -36,7 +36,8 @@ export enum LightDgramProperty {
 	Color = "color",
 	Hue = "hue",
 	Saturation = "saturation",
-	Value = "value"
+	Value = "value",
+	Music = "music",
 }
 
 export enum DgramVerbs {

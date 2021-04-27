@@ -1,11 +1,11 @@
-let _my_log_verbosity_ = 1;
+let logLevel = 3;
 
-export function log(data, level = 1) {
-    if (level <= _my_log_verbosity_)
-        console.log(data.toString());
+export function log(data, level = 3) {
+    if (level <= logLevel)
+        console.log(JSON.stringify(data));
 }
 
-export function set_verbosity(level)
+export function setLevel(level)
 {
-    _my_log_verbosity_ = level;
+    logLevel = level;
 }

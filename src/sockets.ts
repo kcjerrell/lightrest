@@ -1,70 +1,50 @@
 import dgram = require('dgram');
-import * as readline from 'readline';
+import * as repl from 'repl'
 import * as bulbDevice from "./bulbdevice";
 import * as bulbInfoData from './deviceInfo.json';
+import { log, setLevel } from './log';
 import { LightDgram, LightDgramProperty, DgramVerbs } from './lightdgram';
-import { HSV } from './core';
+import { HSV, hsv_to_hex } from './core';
 import { Resources } from './resources';
 import { Resource } from './resource';
-
-
-/*
-
-This kind of got to be a mess, naturally.
-Here's the things I need to maintain:
-
-A list of (bulb) devices
-	(for each):
-		- The associated "resourceId"
-		- a list of watchers (since I guess this should support more than one client?)
-
- I feel like this kind of thing is easier in not javascript
-
- I could do it array style:
- resources = [
-		{
-		resId = "bulb-1",
-		res = (bulbDevice),
-		watchers = [client],
-		},
-	{
-		resId = "bulb-2",
-		res = (bulbDevice),
-		watchers = [client],
-		},
- ]
-
- but then I'd have to make an extra function to select by id... maybe
-
- resources.find(r => r.resId === "the one I want")
-
- I guess that'll work
-
-*/
-
+import { TuyaToHSV } from './color';
+import express = require('express');
 
 const DEFAULTPORT = 8090;
 const DEFAULTHOST = '127.0.0.1';
+const USEMUSICMODE = false;
+const LOADONE = false;
 
 const bulbInfo = bulbInfoData.bulbs;
 
+/**
+ * Represents a UDP interface to Tuya-based LED lightbulbs
+ */
 export class UdpBridge {
 	port: number;
 	resources: Resources;
 	address: string;
 	server: dgram.Socket;
+	client: dgram.RemoteInfo;
 
 	constructor() {
 		this.server = dgram.createSocket('udp4');
 		this.resources = new Resources();
 	}
 
+	/**
+	 * Opens a socket on the specified port and address
+	 * Registers handlers for "listening" and "message" events
+	 *
+	 * @param port the port to use
+	 * @param address the local address
+	 */
 	bind(port: number, address: string) {
 		this.port = port;
 		this.address = address;
 
 		this.server.on('listening', () => {
-			// console.log('UDP Server listening on ' + this.server.address().address + ':' + this.server.address().port);
+			log('UDP Server listening on ' + this.server.address().address + ':' + this.server.address().port, 4);
 		});
 
 		this.server.on('message', (message, remote) => {
@@ -74,42 +54,53 @@ export class UdpBridge {
 		this.server.bind(this.port, this.address);
 	}
 
+	/**
+	 * Callback for socket server "message" event
+	 *
+	 * @param message the message receieved
+	 * @param remote the address and port for the client
+	 */
 	receiveMessage(message: string, remote: dgram.RemoteInfo) {
-		// console.log(remote.address + ":" + remote.port + " - " + message);
+		log(remote.address + ":" + remote.port + " - " + message, 1);
 
-		if (message.toString() === "hello") {
-			this.sendMessage("i have lights", remote);
+		if (this.client === undefined) {
+			this.client = remote;
 		}
-		else {
-			this.processMessage(message, remote);
-		}
+
+		this.processMessage(message, remote);
 	}
 
 	sendMessage(msg: string, remote: dgram.RemoteInfo) {
-		// console.log(`sending message: ${msg}`)
+		log(`sending message: ${msg}  ${remote.address}:${remote.port}`, 2)
 		this.server.send(msg, remote.port, remote.address);
 	}
 
 	async loadResources(info: { id: string; key: string; ip: string; name: string; }[]) {
 		for (const bi of info) {
-			const res = await bulbDevice.TryGetBulb(bi);
-			const resId = `bulb-${this.resources.length + 1}`;
+			await bulbDevice.TryGetBulb(bi).then((res) => {
 
-			const resource = new Resource(resId, res);
-			this.resources.push(resource);
+				const resId = `bulb-${this.resources.length + 1}`;
 
-			res.on('propertychanged', (prop: LightDgramProperty, value: any) => {
-				this.updateLoop(resource, prop);
+				const resource = new Resource(resId, res);
+				this.resources.push(resource);
+
+				res.on('propertychanged', (prop: LightDgramProperty, value: any) => {
+					this.updateLoop(resource, prop);
+				});
+			}, (reason) => {
+				log(reason, 5);
 			});
 
-			// break;
+			if (LOADONE)
+				break;
 		}
 	}
 
 	updateLoop(res: Resource, prop: LightDgramProperty) {
-		for (const w of res.watchers) {
-			this.tell(w, res, prop);
-		}
+		// for (const w of res.watchers) {
+		if (this.client !== undefined)
+			this.tell(this.client, res, prop);
+		//  }
 	}
 
 	tell(remote: dgram.RemoteInfo, res: Resource, prop: string) {
@@ -133,35 +124,58 @@ export class UdpBridge {
 		}
 	}
 
-	onWish(res: Resource, property: string, data: string) {
-		if (property === LightDgramProperty.Power) {
-			const value = (/true/i).test(data);
-			if (res.resource.pow !== value)
-				res.resource.set_power(value);
-		}
-		else if (property === LightDgramProperty.Color) {
-			const value = decodeColor(data);
-			if (res.resource.col !== value)
-				res.resource.set_color(value);
-		}
-		else if (property === LightDgramProperty.Mode) {
-			if (res.resource.mode !== data)
-				res.resource.set_mode(data);
-		}
-		else if (property === LightDgramProperty.Brightness) {
-			const value = parseFloat(data);
-			if (res.resource.brightness !== value)
-				res.resource.set_brightness(value);
-		}
-		else if (property === LightDgramProperty.ColorTemp) {
-			const value = parseFloat(data);
-			if (res.resource.colortemp !== value)
-				res.resource.set_warmth(value);
-		}
+	onWish(res: Resource, data: string[]) {
+		const props = data.map(d => {
+			const split = d.split("=");
+			return { property: split[0], value: split[1] };
+		});
+
+		res.resource.qset(props);
 	}
 
+	// for (const pv of props) {
+
+	// 	if (pv.property === LightDgramProperty.Power) {
+	// 		const value = (/true/i).test(pv.value);
+	// 		// if (res.resource.pow !== value)
+	// 		res.resource.qset(LightDgramProperty.Power, value);
+	// 	}
+
+	// 	else if (pv.property === LightDgramProperty.Color) {
+	// 		const value = decodeColor(pv.value);
+	// 		// if (res.resource.col !== value)
+	// 		if (USEMUSICMODE)
+	// 			res.resource.qset(LightDgramProperty.Music, `0ffffffffffff00000000`);
+	// 		// res.resource.qset(LightDgramProperty.Music, `0${hsv_to_hex(value)}00000000`);
+	// 		else
+	// 			res.resource.qset(LightDgramProperty.Color, hsv_to_hex(value));
+	// 	}
+
+	// 	else if (pv.property === LightDgramProperty.Mode) {
+	// 		// if (res.resource.mode !== data)
+	// 		const mode = bulbDevice.Bulb.validateMode(pv.value);
+	// 		if (mode)
+	// 			res.resource.qset(LightDgramProperty.Mode, mode);
+	// 	}
+
+	// 	else if (pv.property === LightDgramProperty.Brightness) {
+	// 		const value = parseFloat(pv.value);
+	// 		// if (res.resource.brightness !== value)
+	// 		res.resource.qset(LightDgramProperty.Brightness, value);
+	// 	}
+
+	// 	else if (pv.property === LightDgramProperty.ColorTemp) {
+	// 		const value = parseFloat(pv.value);
+	// 		// if (res.resource.colortemp !== value)
+	// 		res.resource.qset(LightDgramProperty.ColorTemp, value);
+	// 	}
+	// }
+	//  }
+
 	enloop(remote: dgram.RemoteInfo, res: Resource) {
-		res.addWatcher(remote);
+		// res.addWatcher(remote);
+
+		this.client = remote;
 
 		const props = [LightDgramProperty.Power, LightDgramProperty.Color, LightDgramProperty.Mode, LightDgramProperty.Brightness, LightDgramProperty.ColorTemp];
 		for (const prop of props) {
@@ -174,19 +188,19 @@ export class UdpBridge {
 
 		const verb: string = split[0];
 		const target = this.resources.getMatching(split[1]);
-		const property = split[2];
-		const data = split[3];
+		// const property = split[2];
+		// const data = split[3];
 
-		// console.log(`msg received: ${msg}`);
+		log(`msg received: ${msg} from ${remote.address}:${remote.port}`, 1);
 
 		for (const t of target) {
 			switch (verb) {
 				case DgramVerbs.Wonder:
-					this.tell(remote, t, property);
+					this.tell(remote, t, split[2]);
 					break;
 
 				case DgramVerbs.Wish:
-					this.onWish(t, property, data);
+					this.onWish(t, split.slice(2));
 					break;
 
 				case DgramVerbs.Enloop:
@@ -218,6 +232,26 @@ function decodeColor(colorText: string): HSV {
 	const v = parseFloat(matches[3]);
 	return { h, s, v };
 }
+
+// const app = express();
+
+// app.set("json spaces", 4);
+
+// app.get('/m/:data', (req, res) => {
+// 	// }
+// });
+
+// app.listen(1337);
+
+
+
+const r = repl.start('> ');
+
+// r.context.app = app;
+r.context.bridge = bridge;
+r.context.bulbInfo = bulbInfo;
+r.context.setLevel = setLevel;
+
 
 // function sendDgrams(dgrams: LightDgram[], targetClient: Client) {
 // 	for (const d of dgrams) {

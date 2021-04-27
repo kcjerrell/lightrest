@@ -56,7 +56,7 @@ export function interpolate_colors(colorA: HSV, colorB: HSV, prog: number) {
     return { h, s, v };
 }
 
-export function hsv_to_hex(h: number, s: number, v: number) {
+export function hsv_to_hex({ h, s, v }) {
     const hh = Math.round(h * 360);
     const hs = Math.round(s * 1000);
     const hv = Math.round(v * 1000);
@@ -75,7 +75,7 @@ export interface BulbInfo {
     name?: string;
 }
 
-export function timeoutPromise(durationMs: number) : Promise<number> {
+export function timeoutPromise(durationMs: number): Promise<number> {
     return new Promise((resolve, reject) => {
         setTimeout(() => resolve(durationMs), durationMs);
     });

@@ -47,10 +47,11 @@ function formatDps(data) {
 }
 
 interface SetOptions {
+    shouldWaitForResponse?: boolean;
     dps?: number;
     set?: any;
     multiple?: boolean;
-    data?: object;
+    data?: { [dps: string]: any }
 }
 
 interface BulbInfo {
@@ -60,6 +61,22 @@ interface BulbInfo {
     name: string
 }
 
+const dpsProps = {
+    'power': '20',
+    'mode': '21',
+    'brightness': '22',
+    'colortemp': '23',
+    'color': '24',
+    'music': '27',
+    '20': 'power',
+    '21': 'mode',
+    '22': 'brightness',
+    '23': 'colortemp',
+    '24': 'color',
+    '27': 'music'
+};
+
+
 export class Bulb extends TuyAPI {
     name: string;
     pow: any;
@@ -68,7 +85,8 @@ export class Bulb extends TuyAPI {
     brightness: any;
     colortemp: any;
     status: any;
-   // resourceId: string;
+    initialLog: boolean = true;
+    // resourceId: string;
 
     constructor({ id, key, ip, name = '' }: BulbInfo) {
         super({ id, key, ip, version: 3.3 });
@@ -80,35 +98,115 @@ export class Bulb extends TuyAPI {
     }
 
     onConnected() {
-        log(`${this.name} connected`, 2);
+        log(`${this.name} connected`, 4);
+        super.get({ schema: true }).then((data) => log(data, 4));
     }
 
     set(options: SetOptions): Promise<object> {
-        const promise = new Promise<object>((resolve, reject) => {
-            const cancelToken = { cancelled: false };
+        // const promise = new Promise<object>((resolve, reject) => {
+        //    const cancelToken = { cancelled: false };
 
-            const to = setTimeout((elapsedMs) => {
-                cancelToken.cancelled = true;
-                resolve({ error: "timedout", elapsedMs });
-            }, timeoutMs, timeoutMs);
+        //    const to = setTimeout((elapsedMs) => {
+        //        cancelToken.cancelled = true;
+        //        resolve({ error: "timedout", elapsedMs });
+        //    }, timeoutMs, timeoutMs);
 
-            super.set(options).then((value) => {
-                if (!cancelToken.cancelled) {
-                    clearTimeout(to);
-                    resolve(value);
-                }
-            }, (reason) => {
-                if (!cancelToken.cancelled) {
-                    clearTimeout(to);
-                    resolve({ error: reason });
-                }
-            });
+        //    super.set(options).then((value) => {
+        //        if (!cancelToken.cancelled) {
+        //            clearTimeout(to);
+        //            resolve(value);
+        //        }
+        //    }, (reason) => {
+        //        if (!cancelToken.cancelled) {
+        //            clearTimeout(to);
+        //            resolve({ error: reason });
+        //        }
+        //    });
+        // });
+        return super.set(options);
+    }
+
+
+
+    // 0004c02ba03e800000000
+    // 000fc03e8032000000000
+    qset(data: { property: string, value: string }[]) {
+        const options: SetOptions = { shouldWaitForResponse: false }
+
+        // if (data.length === 1) {
+        //     options.dps = dpsProps[data[0].property];
+        //    options.set = data[0].value;
+        // }
+
+        //else {
+        options.multiple = true;
+        options.data = {};
+
+        data.forEach(d => {
+            const dps = dpsProps[d.property];
+
+            switch (d.property) {
+                case 'power':
+                    options.data[dps] = (/true/i).test(d.value);
+                    break;
+
+                case 'color':
+                    const color = decodeColor(d.value);
+                    options.data[dps] = hsv_to_hex(color);
+                    break;
+
+                case 'mode':
+                    options.data[dps] = Bulb.validateMode(d.value);
+                    break;
+
+                case 'brightness':
+                    options.data[dps] = parseFloat(d.value);
+                    break;
+
+                case 'colortemp':
+                    options.data[dps] = parseFloat(d.value);
+
+                default:
+                    break;
+            }
         });
-        return promise;
+        // }
+        // const dps = dpsProps[property];
+        // const options = { dps, set: value, shouldWaitForResponse: false };
+        // log(`${property} ${value} : ${JSON.stringify(options)}`, 2)
+        // super.set(options);
+
+        log(options, 3);
+
+        super.set(options);
+
+        function decodeColor(colorText: string): HSV {
+            const matches = colorText.match(/h([0-9.]+)s([0-9.]+)v([0-9.]+)/);
+            const h = parseFloat(matches[1]);
+            const s = parseFloat(matches[2]);
+            const v = parseFloat(matches[3]);
+            return { h, s, v };
+        }
+    }
+
+
+    static validateMode(mode: string) {
+        const lmode = mode.toLowerCase();
+        if (lmode === "color")
+            return "colour";
+        else if (lmode === "white" || lmode === "colour")
+            return lmode;
+        else
+            return null;
     }
 
     onData(data) {
-        // log(`${this.name}: ${data}`, 0);
+        if (this.initialLog) {
+            log(`${this.name}: ${JSON.stringify(data)}`, 3);
+            this.initialLog = false;
+        }
+        else
+            log(`${this.name}: ${JSON.stringify(data)}`, 1);
 
         if (data.dps !== undefined) {
             if (data.dps['20'] !== undefined) {
@@ -135,16 +233,16 @@ export class Bulb extends TuyAPI {
     }
 
     onDisconnected() {
-        log(`${this.name} disconnected!`, 2);
+        log(`${this.name} disconnected!`, 3);
     }
 
     onError(error) {
-        log(`${this.name} error! ${error}`, 0);
+        log(`${this.name} error! ${error}`, 5);
     }
 
     set_status(status) {
         this.status = status;
-        // console.log(this.status);
+        log(this.status, 2);
     }
 
     async get_power() {
@@ -166,7 +264,7 @@ export class Bulb extends TuyAPI {
         const h = color.h >= 0 ? color.h : this.col.h;
         const s = color.s >= 0 ? color.s : this.col.s;
         const v = color.v >= 0 ? color.v : this.col.v;
-        const hex = hsv_to_hex(h, s, v);
+        const hex = hsv_to_hex({ h, s, v });
 
         const data = await this.set({ dps: 24, set: hex });
         return formatDps(data);

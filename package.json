@@ -4,7 +4,7 @@
   "description": "lightrest",
   "main": "dist/sockets.js",
   "scripts": {
-    "start": "tsc && node dist/sockets.js",
+    "start": "tsc && node --trace-warnings dist/sockets.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
