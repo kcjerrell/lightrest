@@ -171,13 +171,16 @@ export class UdpBridge {
 	 * @param remote the client info
 	 * @param res the requested device resource
 	 */
-	enloop(remote: dgram.RemoteInfo, res: Resource) {
+	async enloop(remote: dgram.RemoteInfo, res: Resource) {
 		this.client = remote;
-
-		const props = [LightDgramProperty.Power, LightDgramProperty.Color, LightDgramProperty.Mode, LightDgramProperty.Brightness, LightDgramProperty.ColorTemp];
-		for (const prop of props) {
-			this.tell(remote, res, prop);
-		}
+		console.log(`enlooping ${res.resource.name}`);
+		res.resource.get({ schema: true }).then(d => {
+			console.log(`then ${res}`);
+			const props = [LightDgramProperty.Power, LightDgramProperty.Color, LightDgramProperty.Mode, LightDgramProperty.Brightness, LightDgramProperty.ColorTemp];
+			for (const prop of props) {
+				this.tell(remote, res, prop);
+			}
+		});
 	}
 
 	/**
