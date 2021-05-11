@@ -74,7 +74,6 @@ const dpsProps = {
     '27': 'music'
 };
 
-
 export class Bulb extends TuyAPI {
     name: string;
     pow: any;
@@ -107,18 +106,10 @@ export class Bulb extends TuyAPI {
     // 0004c02ba03e800000000
     // 000fc03e8032000000000
     qset(data: { property: string, value: string }[]) {
-        const options: SetOptions = { shouldWaitForResponse: false }
-
-        options.multiple = true;
-        options.data = {};
-
-        // I need to scan through the properties and if there is a "mode" wish,
-        // It can be disregarded if an implicit property is also wished for
-        // IE: if you set "color", mode will automatically switch. I think that's why I get
-        // those flashes is because the mode switches and then immediately it changes color/temp
-
-        if (data.length > 1) {
-            const modeReq = data.find(d => d.property === 'mode')
+        const options: SetOptions = {
+            shouldWaitForResponse: false,
+            multiple: true,
+            data: {}
         }
 
         data.forEach(d => {

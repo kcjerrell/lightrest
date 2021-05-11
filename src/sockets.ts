@@ -131,6 +131,9 @@ export class UdpBridge {
 		if (prop === LightDgramProperty.Name) {
 			this.sendMessage(`tell:${res.id}:${LightDgramProperty.Name}:${res.resource.name}`, remote)
 		}
+		else if (prop === LightDgramProperty.Id) {
+			this.sendMessage(`tell:${res.id}:${LightDgramProperty.Id}:${res.resource.device.id}`, remote)
+		}
 		else if (prop === LightDgramProperty.Power) {
 			this.sendMessage(`tell:${res.id}:${LightDgramProperty.Power}:${res.resource.pow}`, remote)
 		}
@@ -173,9 +176,9 @@ export class UdpBridge {
 	 */
 	async enloop(remote: dgram.RemoteInfo, res: Resource) {
 		this.client = remote;
-		console.log(`enlooping ${res.resource.name}`);
+		log(`enlooping ${res.resource.name}`,3);
 		res.resource.get({ schema: true }).then(d => {
-			console.log(`then ${res}`);
+			log(`then ${res}`,3);
 			const props = [LightDgramProperty.Power, LightDgramProperty.Color, LightDgramProperty.Mode, LightDgramProperty.Brightness, LightDgramProperty.ColorTemp];
 			for (const prop of props) {
 				this.tell(remote, res, prop);
