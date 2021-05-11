@@ -41,5 +41,5 @@ dist/**/*
 yarn.lock
 credentials.json
 token.json
-deviceInfo.json
+src/deviceInfo.json
 exclude/*
