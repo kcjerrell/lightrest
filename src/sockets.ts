@@ -4,15 +4,13 @@ import * as bulbDevice from "./bulbdevice";
 import * as bulbInfoData from './deviceInfo.json';
 import { log, setLevel } from './log';
 import { LightDgram, LightDgramProperty, DgramVerbs } from './lightdgram';
-import { HSV, hsv_to_hex } from './core';
+import { HSV, hsvToTuya } from './core';
 import { Resources } from './resources';
 import { Resource } from './resource';
-import { TuyaToHSV } from './color';
 import express = require('express');
 
 const DEFAULTPORT = 8090;
 const DEFAULTHOST = '127.0.0.1';
-const USEMUSICMODE = false;
 const LOADONE = false;
 
 const bulbInfo = bulbInfoData.bulbs;

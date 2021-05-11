@@ -9,45 +9,6 @@ export function clamp(num, min, max) {
     return num <= min ? min : num >= max ? max : num;
 }
 
-export function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export function rand(min: number, max: number): number {
-    return (max - min) * Math.random() + min;
-}
-
-export function rand_gap(
-    min: number,
-    max: number,
-    gapMin: number,
-    gapMax: number
-) {
-    // gap_min = Math.max(min, gap_min);
-    // gap_max = Math.min(max, gap_max);
-
-    const range = max - min;
-    let x = range * Math.random() + min;
-
-    // x is in the gap
-    if (x > gapMin && x < gapMax) {
-        // x is closer to the max edge
-        if (x > (gapMax - gapMin) / 2) {
-            x = gapMax;
-        }
-        // x is closer to the min edge
-        else {
-            x = gapMin;
-        }
-
-        // make sure that didn't put us out of range
-        if (x > max) x = gapMin;
-        else if (x < min) x = gapMax;
-    }
-
-    return x;
-}
-
 export function interpolate_colors(colorA: HSV, colorB: HSV, prog: number) {
     const h = (colorB.h - colorA.h) * prog + colorA.h;
     const s = (colorB.s - colorA.s) * prog + colorA.s;
@@ -56,7 +17,7 @@ export function interpolate_colors(colorA: HSV, colorB: HSV, prog: number) {
     return { h, s, v };
 }
 
-export function hsv_to_hex({ h, s, v }) {
+export function hsvToTuya({ h, s, v }) {
     const hh = Math.round(h * 360);
     const hs = Math.round(s * 1000);
     const hv = Math.round(v * 1000);
@@ -68,30 +29,25 @@ export function hsv_to_hex({ h, s, v }) {
     return hex;
 }
 
+export function dgramToHsv(colorText: string): HSV {
+    const matches = colorText.match(/h([0-9.]+)s([0-9.]+)v([0-9.]+)/);
+    const h = parseFloat(matches[1]);
+    const s = parseFloat(matches[2]);
+    const v = parseFloat(matches[3]);
+    return { h, s, v };
+}
+
+export function tuyaToHSV(hex) {
+    const h = parseInt(hex.slice(1, 4), 16) / 360.0;
+    const s = parseInt(hex.slice(4, 8), 16) / 1000.0;
+    const v = parseInt(hex.slice(8, 12), 16) / 1000.0;
+
+    return { h, s, v };
+}
+
 export interface BulbInfo {
     id?: string;
     key?: string;
     ip?: string;
     name?: string;
 }
-
-export function timeoutPromise(durationMs: number): Promise<number> {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => resolve(durationMs), durationMs);
-    });
-}
-
-/* export function timeoutPromise(executor: Executor, toCallback: TimeoutCallback, durationMs: number) {
-    const cancelToken = { cancelled: false, timedOut: false };
-
-    setTimeout((tc: TimeoutCallback) => {
-        cancelToken.timedOut = true;
-        tc(durationMs);
-    }, durationMs, toCallback);
-
-
-}
-
-type Executor = (resolve: (value: unknown) => void, reject: (reason: any) => void) => void;
-
-type TimeoutCallback = (elapsedMs: number) => void; */

@@ -1,48 +1,9 @@
 import TuyAPI = require('tuyapi');
-import col = require('./color')
 import logger = require('./log');
-import { HSV, hsv_to_hex, interpolate_colors, timeoutPromise } from './core';
-import EventEmitter = require('node:events');
+import { HSV, hsvToTuya, dgramToHsv, tuyaToHSV, BulbInfo } from './core';
 import { LightDgramProperty } from './lightdgram';
 
 const log = logger.log;
-
-const timeoutMs = 500;
-
-function formatDps(data) {
-    if (data.dps === undefined)
-        return data;
-
-    if (data.dps.hasOwnProperty('20')) {
-        data.dps.power = data.dps['20'];
-        delete data.dps['20'];
-    }
-
-    if (data.dps.hasOwnProperty('24')) {
-        data.dps.color = col.TuyaToHSV(data.dps['24']);
-        delete data.dps['24'];
-    }
-
-    if (data.dps.hasOwnProperty('21')) {
-        data.dps.mode = data.dps['21'];
-        delete data.dps['21'];
-    }
-
-    if (data.dps.hasOwnProperty('22')) {
-        data.dps.brightness = data.dps['22'];
-        delete data.dps['22'];
-    }
-
-    if (data.dps.hasOwnProperty('23')) {
-        data.dps.warmth = data.dps['23'];
-        delete data.dps['23'];
-    }
-
-    if (data.hasOwnProperty('t'))
-        delete data.t;
-
-    return data;
-}
 
 interface SetOptions {
     shouldWaitForResponse?: boolean;
@@ -50,13 +11,6 @@ interface SetOptions {
     set?: any;
     multiple?: boolean;
     data?: { [dps: string]: any }
-}
-
-interface BulbInfo {
-    id: string,
-    key: string,
-    ip: string,
-    name: string
 }
 
 const dpsProps = {
@@ -103,8 +57,6 @@ export class Bulb extends TuyAPI {
         return super.set(options);
     }
 
-    // 0004c02ba03e800000000
-    // 000fc03e8032000000000
     qset(data: { property: string, value: string }[]) {
         const options: SetOptions = {
             shouldWaitForResponse: false,
@@ -121,8 +73,8 @@ export class Bulb extends TuyAPI {
                     break;
 
                 case 'color':
-                    const color = decodeColor(d.value);
-                    options.data[dps] = hsv_to_hex(color);
+                    const color = dgramToHsv(d.value);
+                    options.data[dps] = hsvToTuya(color);
                     break;
 
                 case 'mode':
@@ -142,24 +94,6 @@ export class Bulb extends TuyAPI {
         });
 
         this.set(options);
-
-        function decodeColor(colorText: string): HSV {
-            const matches = colorText.match(/h([0-9.]+)s([0-9.]+)v([0-9.]+)/);
-            const h = parseFloat(matches[1]);
-            const s = parseFloat(matches[2]);
-            const v = parseFloat(matches[3]);
-            return { h, s, v };
-        }
-    }
-
-    static validateMode(mode: string) {
-        const lmode = mode.toLowerCase();
-        if (lmode === "color")
-            return "colour";
-        else if (lmode === "white" || lmode === "colour")
-            return lmode;
-        else
-            return null;
     }
 
     onData(data) {
@@ -176,7 +110,7 @@ export class Bulb extends TuyAPI {
                 super.emit('propertychanged', LightDgramProperty.Power, this.pow);
             }
             if (data.dps['24'] !== undefined) {
-                this.col = col.TuyaToHSV(data.dps['24']);
+                this.col = tuyaToHSV(data.dps['24']);
                 super.emit('propertychanged', LightDgramProperty.Color, this.col);
             }
             if (data.dps['21'] !== undefined) {
@@ -202,11 +136,6 @@ export class Bulb extends TuyAPI {
         log(`${this.name} error! ${error}`, 5);
     }
 
-    set_status(status) {
-        this.status = status;
-        log(this.status, 2);
-    }
-
     async get_power() {
         const power = await this.get({ dps: 20 });
         return { dps: { power } };
@@ -214,68 +143,98 @@ export class Bulb extends TuyAPI {
 
     async set_power(power) {
         const data = await this.set({ dps: 20, set: power });
-        return formatDps(data);
+        return Bulb.formatDps(data);
     }
 
     async get_color() {
         const color = await this.get({ dps: 24 });
-        return { dps: { color: col.TuyaToHSV(color) } };
+        return { dps: { color: tuyaToHSV(color) } };
     }
 
     async set_color(color) {
         const h = color.h >= 0 ? color.h : this.col.h;
         const s = color.s >= 0 ? color.s : this.col.s;
         const v = color.v >= 0 ? color.v : this.col.v;
-        const hex = hsv_to_hex({ h, s, v });
+        const hex = hsvToTuya({ h, s, v });
 
         const data = await this.set({ dps: 24, set: hex });
-        return formatDps(data);
-    }
-
-    formatMode(data) {
-        if (data === "colour")
-            data = "color";
-        return { dps: { mode: data } };
+        return Bulb.formatDps(data);
     }
 
     async get_mode() {
         const data = await this.get({ dps: 21 });
-        return formatDps(data);
+        return Bulb.formatDps(data);
     }
 
     async set_mode(mode) {
-        if (mode === 'color' || mode === 'colour')
-            return formatDps(await this.set({ dps: 21, set: 'colour' }));
-        else if (mode === 'white')
-            return formatDps(await this.set({ dps: 21, set: 'white' }));
+        const fmode = Bulb.validateMode(mode);
+        if (mode != null)
+            return Bulb.formatDps(await this.set({ dps: 21, set: fmode }));
     }
 
-    formatBrightness(data) {
-        return { dps: { brightness: data } };
+    static validateMode(mode: string) {
+        const lmode = mode.toLowerCase();
+        if (lmode === "color")
+            return "colour";
+        else if (lmode === "white" || lmode === "colour")
+            return lmode;
+        else
+            return null;
     }
 
     async get_brightness() {
         const data = await this.get({ dps: 22 });
-        return formatDps(data);
+        return Bulb.formatDps(data);
     }
 
     async set_brightness(brightness: number) {
         const data = await this.set({ dps: 22, set: brightness });
-        return formatDps(data);
+        return Bulb.formatDps(data);
     }
 
-    formatWarmth(data) {
-        return { dps: { warmth: data } };
-    }
-
-    async get_warmth() {
+    async get_colorTemp() {
         const data = await this.get({ dps: 23 });
-        return formatDps(data);
+        return Bulb.formatDps(data);
     }
 
-    async set_warmth(warmth: number) {
-        const data = await this.set({ dps: 23, set: warmth });
-        return formatDps(data);
+    async set_colorTemp(colorTemp: number) {
+        const data = await this.set({ dps: 23, set: colorTemp });
+        return Bulb.formatDps(data);
+    }
+
+    static formatDps(data) {
+        if (data.dps === undefined)
+            return data;
+
+        if (data.dps.hasOwnProperty('20')) {
+            data.dps.power = data.dps['20'];
+            delete data.dps['20'];
+        }
+
+        if (data.dps.hasOwnProperty('24')) {
+            data.dps.color = tuyaToHSV(data.dps['24']);
+            delete data.dps['24'];
+        }
+
+        if (data.dps.hasOwnProperty('21')) {
+            data.dps.mode = data.dps['21'];
+            delete data.dps['21'];
+        }
+
+        if (data.dps.hasOwnProperty('22')) {
+            data.dps.brightness = data.dps['22'];
+            delete data.dps['22'];
+        }
+
+        if (data.dps.hasOwnProperty('23')) {
+            data.dps.colorTemp = data.dps['23'];
+            delete data.dps['23'];
+        }
+
+        if (data.hasOwnProperty('t'))
+            delete data.t;
+
+        return data;
     }
 }
 
