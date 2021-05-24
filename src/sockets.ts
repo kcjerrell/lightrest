@@ -24,6 +24,7 @@ export class UdpBridge {
 	address: string;
 	server: dgram.Socket;
 	client: dgram.RemoteInfo;
+	resIdsAssigned = 0;
 
 	constructor() {
 		this.server = dgram.createSocket('udp4');
@@ -87,10 +88,9 @@ export class UdpBridge {
 	 */
 	async loadResources(info: { id: string; key: string; ip: string; name: string; }[]) {
 		for (const bi of info) {
+			const resId = `bulb-${++this.resIdsAssigned}`;
+
 			await bulbDevice.TryGetBulb(bi).then((res) => {
-
-				const resId = `bulb-${this.resources.length + 1}`;
-
 				const resource = new Resource(resId, res);
 				this.resources.push(resource);
 
@@ -174,9 +174,9 @@ export class UdpBridge {
 	 */
 	async enloop(remote: dgram.RemoteInfo, res: Resource) {
 		this.client = remote;
-		log(`enlooping ${res.resource.name}`,3);
+		log(`enlooping ${res.resource.name}`, 3);
 		res.resource.get({ schema: true }).then(d => {
-			log(`then ${res}`,3);
+			log(`then ${res}`, 3);
 			const props = [LightDgramProperty.Power, LightDgramProperty.Color, LightDgramProperty.Mode, LightDgramProperty.Brightness, LightDgramProperty.ColorTemp];
 			for (const prop of props) {
 				this.tell(remote, res, prop);
@@ -192,6 +192,11 @@ export class UdpBridge {
 	 */
 	processMessage(msg: string, remote: dgram.RemoteInfo) {
 		const split = msg.split(":");
+
+		if (split[1] === 'bridge') {
+			this.processBridgeMessage(split, remote);
+			return;
+		}
 
 		const verb: string = split[0];
 		const target = this.resources.getMatching(split[1]);
@@ -220,10 +225,28 @@ export class UdpBridge {
 			}
 		}
 	}
+
+	processBridgeMessage(split: string[], remote: dgram.RemoteInfo) {
+		const verb = split[0];
+
+		if (verb === 'reload') {
+			const notloaded = bulbInfo.filter(bi => bridge.resources.find(r => r.resource.id === bi.id) === undefined);
+			bridge.loadResources(notloaded).then(() => {
+				this.resources.forEach(res => {
+					this.tell(remote, res, LightDgramProperty.Id);
+				});
+			});
+		}
+	}
 }
 
+
 const bridge = new UdpBridge();
-bridge.loadResources(bulbInfo);
+bridge.loadResources(bulbInfo).then(() => {
+	const notloaded = bulbInfo.filter(bi => bridge.resources.find(r => r.resource.id === bi.id) === undefined);
+	console.log(notloaded);
+	bridge.loadResources(notloaded);
+});
 bridge.bind(DEFAULTPORT, DEFAULTHOST);
 
 function encodeColor(color: HSV) {
@@ -243,3 +266,4 @@ const r = repl.start('> ');
 r.context.bridge = bridge;
 r.context.bulbInfo = bulbInfo;
 r.context.setLevel = setLevel;
+

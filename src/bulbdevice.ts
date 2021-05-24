@@ -30,17 +30,18 @@ const dpsProps = {
 
 export class Bulb extends TuyAPI {
     name: string;
+    id: string;
     pow: any;
     col: HSV;
     mode: any;
     brightness: any;
     colortemp: any;
     status: any;
-    initialLog: boolean = true;
 
-    constructor({ id, key, ip, name = '' }: BulbInfo) {
-        super({ id, key, ip, version: 3.3 });
-        this.name = name;
+    constructor({ id, key, ip }: BulbInfo) {
+        super({ id, ip, key, version: 3.3 });
+        this.name = id.slice(-5);
+        this.id = id;
         this.on('connected', this.onConnected);
         this.on('data', this.onData);
         this.on('disconnected', this.onDisconnected);
@@ -96,13 +97,30 @@ export class Bulb extends TuyAPI {
         this.set(options);
     }
 
-    onData(data) {
-        if (this.initialLog) {
-            log(`${this.name} init-rcvd: ${JSON.stringify(data)}`, 3);
-            this.initialLog = false;
+    qdTap(color: HSV) {
+        // the idea here is to see how the bulbs transition when receiving two calls within a short window
+        // the desired color is within the fade limit
+        // so request is made outside of that range, and then stop talking you get it
+
+        const options: SetOptions = {
+            shouldWaitForResponse: false,
+            multiple: true,
+            data: {}
         }
-        else
-            log(`${this.name} rcvd: ${JSON.stringify(data)}`, 1);
+
+        const midColor = this.col;
+        midColor.v = midColor.v + 0.2 > 1.0 ? midColor.v - 0.2 : midColor.v + 0.2;
+        options.data['24'] = hsvToTuya(midColor);
+        console.log(midColor);
+
+        this.set(options).then(data => {
+            options.data['24'] = hsvToTuya(color);
+            this.set(options);
+        })
+    }
+
+    onData(data) {
+        log(`${this.name} rcvd: ${JSON.stringify(data)}`, 1);
 
         if (data.dps !== undefined) {
             if (data.dps['20'] !== undefined) {
@@ -240,6 +258,7 @@ export class Bulb extends TuyAPI {
 
 export function TryGetBulb(info: BulbInfo): Promise<Bulb> {
     return new Promise((resolve, reject) => {
+        log(`bulb requested ${info.id}`, 5);
         const bulb = new Bulb(info);
 
         const timeout = setTimeout(() => { bulb.disconnect(); }, 3000)
